@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Reports - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay Complaint System - Admin</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/admin-dashboard">Dashboard</a>
+                <a href="/manage-reports" class="active">Manage Reports</a>
+                <a href="/user-approval">User Approval</a>
+                <a href="/resident-directory">Resident Directory</a>
+                <a href="/transaction-history">Transaction History</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Manage Reports</h2>
+                <p>View and manage all resident reports. Update status and delete reports as needed.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                
+                <!-- Filter and Search -->
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <input type="text" id="searchInput" placeholder="Search reports..." 
+                               style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div style="min-width: 150px;">
+                        <select id="statusFilter" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="ongoing">Ongoing</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="reportsContainer">
+                    <div class="loading">Loading reports...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allReports = [];
+        let filteredReports = [];
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load all reports
+        async function loadReports() {
+            try {
+                console.log('Loading reports...');
+                const response = await fetch('/api/reports');
+                console.log('Response status:', response.status);
+                if (response.ok) {
+                    allReports = await response.json();
+                    console.log('Reports loaded:', allReports.length);
+                    filteredReports = [...allReports];
+                    displayReports(filteredReports);
+                } else {
+                    console.error('Failed to load reports:', response.statusText);
+                    showAlert('Failed to load reports', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                showAlert('An error occurred while loading reports', 'error');
+            }
+        }
+
+        // Display reports
+        function displayReports(reportsToDisplay) {
+            const container = document.getElementById('reportsContainer');
+            
+            if (reportsToDisplay.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No reports found</h3>
+                        <p>${allReports.length === 0 ? 'No reports have been submitted yet.' : 'No reports match your filters.'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Incident</th>
+                                <th>Resident Name</th>
+                                <th>Location</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${reportsToDisplay.map(report => `
+                                <tr>
+                                    <td>${report.description.length > 80 ? report.description.substring(0, 80) + '...' : report.description}</td>
+                                    <td>${report.resident_name}</td>
+                                    <td>${report.location}</td>
+                                    <td>${new Date(report.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <select class="status-badge status-${report.status}" 
+                                                onchange="updateStatus(${report.id}, this.value)"
+                                                style="border: none; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500; text-transform: uppercase; cursor: pointer;">
+                                            <option value="pending" ${report.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                            <option value="ongoing" ${report.status === 'ongoing' ? 'selected' : ''}>Ongoing</option>
+                                            <option value="resolved" ${report.status === 'resolved' ? 'selected' : ''}>Resolved</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-danger" onclick="deleteReport(${report.id})">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Update report status
+        async function updateStatus(reportId, newStatus) {
+            try {
+                const response = await fetch(`/api/reports/${reportId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Report status updated successfully', 'success');
+                    loadReports(); // Reload to refresh data
+                } else {
+                    showAlert(result.message, 'error');
+                    loadReports(); // Reload to restore original state
+                }
+            } catch (error) {
+                showAlert('An error occurred while updating status', 'error');
+                loadReports(); // Reload to restore original state
+            }
+        }
+
+        // Delete report
+        async function deleteReport(reportId) {
+            if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/reports/${reportId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Report deleted successfully', 'success');
+                    loadReports();
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while deleting the report', 'error');
+            }
+        }
+
+        // Filter and search functions
+        document.getElementById('searchInput').addEventListener('input', filterReports);
+        document.getElementById('statusFilter').addEventListener('change', filterReports);
+
+        function filterReports() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            filteredReports = allReports.filter(report => {
+                const matchesSearch = report.description.toLowerCase().includes(searchTerm) ||
+                                    report.resident_name.toLowerCase().includes(searchTerm) ||
+                                    report.location.toLowerCase().includes(searchTerm);
+                
+                const matchesStatus = !statusFilter || report.status === statusFilter;
+                
+                return matchesSearch && matchesStatus;
+            });
+            
+            displayReports(filteredReports);
+        }
+
+        // Show alert function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadReports();
+        });
+    </script>
+</body>
+</html>

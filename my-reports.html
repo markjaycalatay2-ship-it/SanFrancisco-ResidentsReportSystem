@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Reports - Barangay San Francisco Resident Report System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay San Francisco Resident Report System</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/resident-dashboard">Dashboard</a>
+                <a href="/new-report">New Report</a>
+                <a href="/my-reports" class="active">My Reports</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>My Reports</h2>
+                <p>View and manage all your submitted reports.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                <div id="reportsContainer">
+                    <div class="loading">Loading your reports...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Report Modal -->
+    <div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+            <h2>Edit Report</h2>
+            <div id="editAlertContainer"></div>
+            <form id="editForm">
+                <input type="hidden" id="editReportId">
+                
+                <div class="form-group">
+                    <label for="editDescription">Description</label>
+                    <textarea id="editDescription" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="editDateTime">Date & Time</label>
+                    <input type="datetime-local" id="editDateTime" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editLocation">Location</label>
+                    <input type="text" id="editLocation" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editInvolvedPersons">Involved Persons</label>
+                    <input type="text" id="editInvolvedPersons">
+                </div>
+
+                <div class="form-group">
+                    <label for="editCause">Cause</label>
+                    <input type="text" id="editCause">
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let reports = [];
+        let currentUserId = null;
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    currentUserId = user.userId; // Store current user ID
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load your reports only
+        async function loadReports() {
+            try {
+                const response = await fetch('/api/my-reports');
+                if (response.ok) {
+                    reports = await response.json();
+                    displayReports(reports);
+                } else {
+                    showAlert('Failed to load your reports', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while loading your reports', 'error');
+            }
+        }
+
+        // Display reports
+        function displayReports(reportsToDisplay) {
+            const container = document.getElementById('reportsContainer');
+            
+            if (reportsToDisplay.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No reports found</h3>
+                        <p>You haven't submitted any reports yet.</p>
+                        <button class="btn btn-primary" onclick="window.location.href='/new-report'">
+                            Submit Your First Report
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Location</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${reportsToDisplay.map(report => `
+                                <tr>
+                                    <td>${report.description.length > 100 ? report.description.substring(0, 100) + '...' : report.description}</td>
+                                    <td>${report.location}</td>
+                                    <td>${new Date(report.created_at).toLocaleDateString()}</td>
+                                    <td><span class="status-badge status-${report.status}">${report.status}</span></td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-primary" onclick="editReport(${report.id})">Edit</button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteReport(${report.id})">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Edit report
+        function editReport(reportId) {
+            const report = reports.find(r => r.id === reportId);
+            if (!report) return;
+            
+            document.getElementById('editReportId').value = report.id;
+            document.getElementById('editDescription').value = report.description;
+            document.getElementById('editDateTime').value = report.date_time;
+            document.getElementById('editLocation').value = report.location;
+            document.getElementById('editInvolvedPersons').value = report.involved_persons || '';
+            document.getElementById('editCause').value = report.cause || '';
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        // Close edit modal
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            document.getElementById('editAlertContainer').innerHTML = '';
+        }
+
+        // Handle edit form submission
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const reportId = document.getElementById('editReportId').value;
+            const data = {
+                description: document.getElementById('editDescription').value,
+                date_time: document.getElementById('editDateTime').value,
+                location: document.getElementById('editLocation').value,
+                involved_persons: document.getElementById('editInvolvedPersons').value,
+                cause: document.getElementById('editCause').value
+            };
+            
+            try {
+                const response = await fetch(`/api/reports/${reportId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showEditAlert('Report updated successfully', 'success');
+                    closeEditModal();
+                    loadReports();
+                } else {
+                    showEditAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showEditAlert('An error occurred. Please try again.', 'error');
+            }
+        });
+
+        // Delete report
+        async function deleteReport(reportId) {
+            if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/reports/${reportId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Report deleted successfully', 'success');
+                    loadReports();
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while deleting the report', 'error');
+            }
+        }
+
+        // Show alert functions
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        function showEditAlert(message, type) {
+            const alertContainer = document.getElementById('editAlertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadReports();
+        });
+    </script>
+</body>
+</html>

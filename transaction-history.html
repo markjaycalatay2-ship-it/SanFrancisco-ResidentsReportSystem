@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction History - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay Complaint System - Admin</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/admin-dashboard">Dashboard</a>
+                <a href="/manage-reports">Manage Reports</a>
+                <a href="/user-approval">User Approval</a>
+                <a href="/resident-directory">Resident Directory</a>
+                <a href="/transaction-history" class="active">Transaction History</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Transaction History / System Logs</h2>
+                <p>View all system activities and user actions.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                
+                <!-- Filters -->
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <input type="text" id="searchInput" placeholder="Search logs..." 
+                               style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div style="min-width: 150px;">
+                        <select id="actionFilter" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">All Actions</option>
+                            <option value="Login">Login</option>
+                            <option value="Logout">Logout</option>
+                            <option value="Registration">Registration</option>
+                            <option value="Created report">Created Report</option>
+                            <option value="Deleted report">Deleted Report</option>
+                            <option value="Updated report">Updated Report</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="logsContainer">
+                    <div class="loading">Loading transaction history...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allLogs = [];
+        let filteredLogs = [];
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load logs
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                if (response.ok) {
+                    allLogs = await response.json();
+                    filteredLogs = [...allLogs];
+                    displayLogs(filteredLogs);
+                } else {
+                    showAlert('Failed to load transaction history', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while loading transaction history', 'error');
+            }
+        }
+
+        // Display logs
+        function displayLogs(logsToDisplay) {
+            const container = document.getElementById('logsContainer');
+            
+            if (logsToDisplay.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No logs found</h3>
+                        <p>${allLogs.length === 0 ? 'No system activities recorded yet.' : 'No logs match your filters.'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>User</th>
+                                <th>Username</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${logsToDisplay.map(log => `
+                                <tr>
+                                    <td>${new Date(log.timestamp).toLocaleString()}</td>
+                                    <td><strong>${log.full_name}</strong></td>
+                                    <td>${log.username}</td>
+                                    <td>${log.action}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Filter and search functions
+        document.getElementById('searchInput').addEventListener('input', filterLogs);
+        document.getElementById('actionFilter').addEventListener('change', filterLogs);
+
+        function filterLogs() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const actionFilter = document.getElementById('actionFilter').value;
+            
+            filteredLogs = allLogs.filter(log => {
+                const matchesSearch = log.full_name.toLowerCase().includes(searchTerm) ||
+                                    log.username.toLowerCase().includes(searchTerm) ||
+                                    log.action.toLowerCase().includes(searchTerm);
+                
+                const matchesAction = !actionFilter || log.action.includes(actionFilter);
+                
+                return matchesSearch && matchesAction;
+            });
+            
+            displayLogs(filteredLogs);
+        }
+
+        // Show alert function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadLogs();
+        });
+    </script>
+</body>
+</html>

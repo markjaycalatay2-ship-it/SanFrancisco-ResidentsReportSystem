@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resident Dashboard - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay San Francisco Resident Report System</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/resident-dashboard" class="active">Dashboard</a>
+                <a href="/new-report">New Report</a>
+                <a href="/my-reports">My Reports</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Resident Dashboard</h2>
+                <p>Welcome to the Barangay Complaint and Incident Report Monitoring System. You can submit new reports and track the status of your existing reports.</p>
+            </div>
+
+            <div class="stats-container">
+                <div class="stat-card">
+                    <h3>Total Reports</h3>
+                    <div class="stat-number" id="totalReports">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Pending</h3>
+                    <div class="stat-number" id="pendingReports">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Ongoing</h3>
+                    <div class="stat-number" id="ongoingReports">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Resolved</h3>
+                    <div class="stat-number" id="resolvedReports">0</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Recent Reports</h2>
+                <div id="recentReports">
+                    <div class="loading">Loading recent reports...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="window.location.href='/new-report'">
+                        Submit New Report
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='/my-reports'">
+                        View All Reports
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentUserId = null;
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    currentUserId = user.userId; // Store current user ID
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load dashboard statistics
+        async function loadStatistics() {
+            try {
+                // For statistics, show user's own reports
+                const userReportsResponse = await fetch('/api/my-reports');
+                if (userReportsResponse.ok) {
+                    const userReports = await userReportsResponse.json();
+                    
+                    const total = userReports.length;
+                    const pending = userReports.filter(r => r.status === 'pending').length;
+                    const ongoing = userReports.filter(r => r.status === 'ongoing').length;
+                    const resolved = userReports.filter(r => r.status === 'resolved').length;
+                    
+                    document.getElementById('totalReports').textContent = total;
+                    document.getElementById('pendingReports').textContent = pending;
+                    document.getElementById('ongoingReports').textContent = ongoing;
+                    document.getElementById('resolvedReports').textContent = resolved;
+                }
+                
+                // For recent reports, show all residents' reports
+                const allReportsResponse = await fetch('/api/reports');
+                if (allReportsResponse.ok) {
+                    const allReports = await allReportsResponse.json();
+                    const recentReports = allReports.slice(0, 5);
+                    displayRecentReports(recentReports);
+                }
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Display recent reports
+        function displayRecentReports(reports) {
+            const container = document.getElementById('recentReports');
+            
+            if (reports.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No reports yet</h3>
+                        <p>No reports have been submitted by residents yet.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Location</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${reports.map(report => {
+                                const isOwnReport = report.user_id === currentUserId;
+                                return `
+                                <tr>
+                                    <td>${report.description.substring(0, 50)}${report.description.length > 50 ? '...' : ''} <br><small style="color: #7f8c8d;">by @${report.username || 'Unknown'}${isOwnReport ? ' (You)' : ''}</small></td>
+                                    <td>${report.location}</td>
+                                    <td>${new Date(report.created_at).toLocaleDateString()}</td>
+                                    <td><span class="status-badge status-${report.status}">${report.status}</span></td>
+                                </tr>
+                            `}).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadStatistics();
+        });
+    </script>
+</body>
+</html>

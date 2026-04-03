@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Approval - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay Complaint System - Admin</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/admin-dashboard">Dashboard</a>
+                <a href="/manage-reports">Manage Reports</a>
+                <a href="/user-approval" class="active">User Approval</a>
+                <a href="/resident-directory">Resident Directory</a>
+                <a href="/transaction-history">Transaction History</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>User Approval Management</h2>
+                <p>Review and approve or reject new resident registration requests.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                
+                <!-- Search -->
+                <div style="margin-bottom: 1.5rem;">
+                    <input type="text" id="searchInput" placeholder="Search pending users by name, username, or address..." 
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+
+                <div id="pendingUsersContainer">
+                    <div class="loading">Loading pending users...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allPendingUsers = [];
+        let filteredUsers = [];
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load pending users
+        async function loadPendingUsers() {
+            try {
+                const response = await fetch('/api/pending-users');
+                if (response.ok) {
+                    allPendingUsers = await response.json();
+                    filteredUsers = [...allPendingUsers];
+                    displayPendingUsers(filteredUsers);
+                } else {
+                    showAlert('Failed to load pending users', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while loading pending users', 'error');
+            }
+        }
+
+        // Display pending users
+        function displayPendingUsers(usersToDisplay) {
+            const container = document.getElementById('pendingUsersContainer');
+            
+            if (usersToDisplay.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No pending users</h3>
+                        <p>${allPendingUsers.length === 0 ? 'No users are currently pending approval.' : 'No users match your search.'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Age</th>
+                                <th>Gender</th>
+                                <th>Username</th>
+                                <th>Contact</th>
+                                <th>Address</th>
+                                <th>Registration Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${usersToDisplay.map(user => `
+                                <tr>
+                                    <td><strong>${user.full_name}</strong></td>
+                                    <td>${user.age}</td>
+                                    <td>${user.gender}</td>
+                                    <td>${user.username}</td>
+                                    <td>${user.contact_number}</td>
+                                    <td>${user.address}</td>
+                                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-success" onclick="approveUser(${user.id})">Approve</button>
+                                            <button class="btn btn-sm btn-danger" onclick="rejectUser(${user.id})">Reject</button>
+                                            <button class="btn btn-sm btn-warning" onclick="deleteUser(${user.id})">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Approve user
+        async function approveUser(userId) {
+            if (!confirm('Are you sure you want to approve this user? They will be able to login to the system.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${userId}/approve`, {
+                    method: 'PUT'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('User approved successfully', 'success');
+                    loadPendingUsers();
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while approving the user', 'error');
+            }
+        }
+
+        // Reject user
+        async function rejectUser(userId) {
+            if (!confirm('Are you sure you want to reject this user? They will not be able to login to the system.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${userId}/reject`, {
+                    method: 'PUT'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('User rejected successfully', 'success');
+                    loadPendingUsers();
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while rejecting the user', 'error');
+            }
+        }
+
+        // Delete user
+        async function deleteUser(userId) {
+            if (!confirm('Are you sure you want to delete this user? This action cannot be undone and will permanently remove their account and all associated data.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${userId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('User deleted successfully', 'success');
+                    loadPendingUsers();
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while deleting the user', 'error');
+            }
+        }
+
+        // Search function
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            filteredUsers = allPendingUsers.filter(user => {
+                return user.full_name.toLowerCase().includes(searchTerm) ||
+                       user.username.toLowerCase().includes(searchTerm) ||
+                       user.address.toLowerCase().includes(searchTerm) ||
+                       user.contact_number.includes(searchTerm);
+            });
+            
+            displayPendingUsers(filteredUsers);
+        });
+
+        // Show alert function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadPendingUsers();
+        });
+    </script>
+</body>
+</html>

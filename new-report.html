@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Report - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay San Francisco Resident Report System</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/resident-dashboard">Dashboard</a>
+                <a href="/new-report" class="active">New Report</a>
+                <a href="/my-reports">My Reports</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Submit New Report</h2>
+                <p>Please provide detailed information about the incident or complaint you wish to report.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                <form id="reportForm">
+                    <div class="form-group">
+                        <label for="description">What happened? (Description)</label>
+                        <textarea id="description" name="description" required 
+                                  placeholder="Please describe the incident or complaint in detail..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="date_time">When did it happen?</label>
+                        <input type="datetime-local" id="date_time" name="date_time" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="location">Where did it happen? (Location/Purok)</label>
+                        <input type="text" id="location" name="location" required 
+                               placeholder="e.g., Purok 1, Near Barangay Hall">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="involved_persons">Who was involved?</label>
+                        <input type="text" id="involved_persons" name="involved_persons" 
+                               placeholder="Names of people involved (if known)">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cause">Possible cause</label>
+                        <textarea id="cause" name="cause" 
+                                  placeholder="What do you think caused this incident?"></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem;">
+                        <button type="submit" class="btn btn-primary">Submit Report</button>
+                        <button type="button" class="btn btn-secondary" onclick="window.location.href='/resident-dashboard'">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Set default datetime to current
+        function setDefaultDateTime() {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localTime = new Date(now - offset);
+            const dateTimeString = localTime.toISOString().slice(0, 16);
+            document.getElementById('date_time').value = dateTimeString;
+        }
+
+        // Handle form submission
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/reports', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Report submitted successfully! Redirecting to dashboard...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/resident-dashboard';
+                    }, 2000);
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred. Please try again.', 'error');
+            }
+        });
+        
+        // Show alert function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            setDefaultDateTime();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resident Directory - Barangay Complaint System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Barangay Complaint System - Admin</h1>
+        <div class="user-info">
+            <span>Welcome, <span id="userFullName">Loading...</span></span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <aside class="sidebar">
+            <nav>
+                <a href="/admin-dashboard">Dashboard</a>
+                <a href="/manage-reports">Manage Reports</a>
+                <a href="/user-approval">User Approval</a>
+                <a href="/resident-directory" class="active">Resident Directory</a>
+                <a href="/transaction-history">Transaction History</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="card">
+                <h2>Resident Directory</h2>
+                <p>View all registered residents in the barangay system.</p>
+            </div>
+
+            <div class="card">
+                <div id="alert-container"></div>
+                
+                <!-- Search -->
+                <div style="margin-bottom: 1.5rem;">
+                    <input type="text" id="searchInput" placeholder="Search residents by name, username, or address..." 
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+
+                <div id="residentsContainer">
+                    <div class="loading">Loading residents...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let allResidents = [];
+        let filteredResidents = [];
+
+        // Load user information
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user-info');
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userFullName').textContent = user.fullName;
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        }
+
+        // Load residents
+        async function loadResidents() {
+            try {
+                const response = await fetch('/api/residents');
+                if (response.ok) {
+                    allResidents = await response.json();
+                    filteredResidents = [...allResidents];
+                    displayResidents(filteredResidents);
+                } else {
+                    showAlert('Failed to load residents', 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while loading residents', 'error');
+            }
+        }
+
+        // Display residents
+        function displayResidents(residentsToDisplay) {
+            const container = document.getElementById('residentsContainer');
+            
+            if (residentsToDisplay.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No residents found</h3>
+                        <p>${allResidents.length === 0 ? 'No residents have registered yet.' : 'No residents match your search.'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Age</th>
+                                <th>Gender</th>
+                                <th>Username</th>
+                                <th>Contact Number</th>
+                                <th>Address</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${residentsToDisplay.map(resident => `
+                                <tr>
+                                    <td><strong>${resident.full_name}</strong></td>
+                                    <td>${resident.age}</td>
+                                    <td>${resident.gender}</td>
+                                    <td>${resident.username}</td>
+                                    <td>${resident.contact_number}</td>
+                                    <td>${resident.address}</td>
+                                    <td>${resident.last_login ? new Date(resident.last_login).toLocaleDateString() : 'Never'}</td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${resident.id}, '${resident.full_name}')">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+
+        // Search function
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            filteredResidents = allResidents.filter(resident => {
+                return resident.full_name.toLowerCase().includes(searchTerm) ||
+                       resident.username.toLowerCase().includes(searchTerm) ||
+                       resident.address.toLowerCase().includes(searchTerm) ||
+                       resident.contact_number.includes(searchTerm);
+            });
+            
+            displayResidents(filteredResidents);
+        });
+
+        // Delete user function
+        async function deleteUser(userId, userName) {
+            if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone and will permanently remove their account and all associated data (reports, logs, etc.).`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${userId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(`${userName} deleted successfully`, 'success');
+                    loadResidents(); // Reload the residents list
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('An error occurred while deleting the user', 'error');
+            }
+        }
+
+        // Show alert function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadResidents();
+        });
+    </script>
+</body>
+</html>
