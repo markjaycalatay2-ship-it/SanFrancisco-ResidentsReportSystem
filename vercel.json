@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server-sqlite.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/public/(.*)",
+      "dest": "/public/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "server-sqlite.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "SESSION_SECRET": "barangay-sanfrancisco-secret-key-2024"
+  }
+}
